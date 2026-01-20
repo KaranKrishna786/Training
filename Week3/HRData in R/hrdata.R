@@ -1,0 +1,405 @@
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+
+data <- read.csv("/content/HR_Analytics.csv")
+head(data)
+
+sum(is.na(data))
+
+if (sum(is.na(data)) > 0) {
+  data <- na.omit(data)
+}
+
+
+gender_distribution <- data %>%
+  group_by(Gender) %>%
+  summarise(Count = n()) %>%
+  mutate(Percentage = round(Count / sum(Count) * 100, 1))
+
+ggplot(gender_distribution, aes(x = "", y = Percentage, fill = Gender)) +
+  geom_bar(width = 1, stat = "identity") +
+  coord_polar("y", start = 0) +
+  theme_void() +
+  geom_text(aes(label = paste0(Percentage, "%")), 
+            position = position_stack(vjust = 0.5)) +
+  labs(title = "Gender Distribution of Employees") +
+  scale_fill_brewer(palette = "Set3")
+
+ggplot(data, aes(x = factor(Education, levels = c(1, 2, 3, 4, 5)), 
+                 fill = factor(Education))) +
+  geom_bar() +
+  labs(title = "Distribution of Education Levels",
+       x = "Education Level",
+       y = "Number of Employees",
+       fill = "Education Level") +
+  scale_x_discrete(labels = c("1" = "Below College", "2" = "College", "3" = "Bachelor",
+                              "4" = "Master", "5" = "Doctor"))
+
+ggplot(data, aes(x = Age)) +
+  geom_histogram(binwidth = 5, fill = "green", color = "black") +
+  labs(title = "Age Distribution of Employees",
+       x = "Age",
+       y = "Count")
+
+
+ggplot(data, aes(x = JobRole, fill = JobRole)) +
+  geom_bar() +
+  labs(title = "Distribution of Job Roles",
+       x = "Job Role",
+       y = "Count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(data, aes(x = MonthlyIncome)) +
+  geom_histogram(binwidth = 1000, fill = "purple", color = "black") +
+  labs(title = "Distribution of Monthly Income",
+       x = "Monthly Income",
+       y = "Count")
+
+
+
+ggplot(data, aes(x = Department, fill = Gender)) +
+  geom_bar(position = "fill") +
+  scale_y_continuous(labels = scales::percent) +
+  labs(title = "Gender Distribution by Department",
+       x = "Department",
+       y = "Percentage",
+       fill = "Gender") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+library(shiny)
+library(ggplot2)
+library(shinydashboard)
+
+
+ui <- fluidPage(
+  titlePanel("HR Management Analytics Dashboard"),
+  sidebarLayout(
+    sidebarPanel(
+      selectInput("department", "Select Department:", 
+                  choices = unique(data$Department))
+    ),
+    mainPanel(
+      tabsetPanel(
+        tabPanel("Overview", 
+                 fluidRow(
+                   valueBoxOutput("total_employees"),
+                   valueBoxOutput("avg_salary"),
+                   valueBoxOutput("avg_age")
+                 ),
+                 plotOutput("gender_distribution"),
+                 plotOutput("age_distribution"),
+                 plotOutput("education_distribution"),
+                 plotOutput("attrition_by_dept"),
+                 plotOutput("job_satisfaction"),
+                 plotOutput("performance_ratings"),
+                 plotOutput("training_times")
+        ),
+        tabPanel("Employee Engagement", 
+                 plotOutput("engagement_by_dept"),
+                 plotOutput("years_with_manager"),
+                 plotOutput("work_life_balance")
+        ),
+        tabPanel("Attrition Analysis", 
+                 plotOutput("attrition_by_age"),
+                 plotOutput("attrition_by_job_role"),
+                 plotOutput("attrition_by_gender")
+        )
+      )
+    )
+  )
+)
+
+server <- function(input, output) {
+  filtered_data <- reactive({
+    data[data$Department == input$department, ]
+  })
+  
+  output$total_employees <- renderValueBox({
+    valueBox(
+      nrow(filtered_data()), "Total Employees", icon = icon("users"),
+      color = "blue"
+    )
+  })
+  
+  output$avg_salary <- renderValueBox({
+    avg_salary <- round(mean(filtered_data()$MonthlyIncome), 2)
+    valueBox(
+      avg_salary, "Average Salary", icon = icon("dollar-sign"),
+      color = "green"
+    )
+  })
+  
+  output$avg_age <- renderValueBox({
+    avg_age <- round(mean(filtered_data()$Age), 2)
+    valueBox(
+      avg_age, "Average Age", icon = icon("calendar-alt"),
+      color = "purple"
+    )
+  })
+  
+  output$gender_distribution <- renderPlot({
+    gender_dist <- table(filtered_data()$Gender)
+    pie(gender_dist, main="Gender Distribution", 
+        col=c("pink", "lightblue"), labels=paste0(names(gender_dist), "\n", 
+                                                  round(prop.table(gender_dist)*100, 2), "%"))
+  })
+  
+  output$age_distribution <- renderPlot({
+    ggplot(filtered_data(), aes(x=Age)) + 
+      geom_histogram(binwidth=5, fill="blue", color="black") +
+      labs(title="Age Distribution", x="Age", y="Count")
+  })
+  
+  output$education_distribution <- renderPlot({
+    ggplot(filtered_data(), aes(x=EducationField)) + 
+      geom_bar(fill="orange", color="black") +
+      labs(title="Education Distribution", x="Education Field", y="Count")
+  })
+  
+  output$attrition_by_dept <- renderPlot({
+    ggplot(filtered_data(), aes(x=Department, fill=Attrition)) + 
+      geom_bar(position="fill") +
+      labs(title="Attrition by Department", x="Department", y="Proportion")
+  })
+  
+  output$job_satisfaction <- renderPlot({
+    ggplot(filtered_data(), aes(x=JobSatisfaction)) + 
+      geom_bar(fill="green", color="black") +
+      labs(title="Job Satisfaction Levels", x="Job Satisfaction", y="Count")
+  })
+  
+  output$performance_ratings <- renderPlot({
+    ggplot(filtered_data(), aes(x=PerformanceRating)) + 
+      geom_bar(fill="purple", color="black") +
+      labs(title="Performance Ratings Distribution", x="Performance Rating", y="Count")
+  })
+  
+  output$training_times <- renderPlot({
+    ggplot(filtered_data(), aes(x=TrainingTimesLastYear)) + 
+      geom_bar(fill="orange", color="black") +
+      labs(title="Training Times Last Year", x="Training Times", y="Count")
+  })
+  
+  output$engagement_by_dept <- renderPlot({
+    ggplot(filtered_data(), aes(x=Department, y=JobInvolvement)) + 
+      geom_boxplot(fill="lightblue", color="black") +
+      labs(title="Employee Engagement by Department", x="Department", y="Job Involvement")
+  })
+  
+  output$years_with_manager <- renderPlot({
+    ggplot(filtered_data(), aes(x=YearsWithCurrManager)) + 
+      geom_histogram(binwidth=1, fill="lightgreen", color="black") +
+      labs(title="Years with Current Manager", x="Years", y="Count")
+  })
+  
+  output$work_life_balance <- renderPlot({
+    ggplot(filtered_data(), aes(x=WorkLifeBalance)) + 
+      geom_bar(fill="lightcoral", color="black") +
+      labs(title="Work-Life Balance", x="Work-Life Balance", y="Count")
+  })
+  
+  output$attrition_by_age <- renderPlot({
+    ggplot(filtered_data(), aes(x=Age, fill=Attrition)) + 
+      geom_histogram(binwidth=5, position="dodge") +
+      labs(title="Attrition by Age", x="Age", y="Count")
+  })
+  
+  output$attrition_by_job_role <- renderPlot({
+    ggplot(filtered_data(), aes(x=JobRole, fill=Attrition)) + 
+      geom_bar(position="fill") +
+      labs(title="Attrition by Job Role", x="Job Role", y="Proportion")
+  })
+  
+  output$attrition_by_gender <- renderPlot({
+    ggplot(filtered_data(), aes(x=Gender, fill=Attrition)) + 
+      geom_bar(position="fill") +
+      labs(title="Attrition by Gender", x="Gender", y="Proportion")
+  })
+}
+
+shinyApp(ui, server)
+
+
+
+
+library(shiny)
+library(ggplot2)
+library(dplyr)
+
+# Load your dataset
+# data <- read.csv("path_to_your_dataset.csv")
+
+ui <- fluidPage(
+  titlePanel("HR Management Analytics Dashboard"),
+  sidebarLayout(
+    sidebarPanel(
+      selectInput("department", "Select Department:", 
+                  choices = unique(data$Department)),
+      selectInput("time_period", "Select Time Period:", 
+                  choices = c("Last Month", "Last Quarter", "Last Year"))
+    ),
+    mainPanel(
+      tabsetPanel(
+        tabPanel("Overview", 
+                 fluidRow(
+                   valueBoxOutput("total_employees"),
+                   valueBoxOutput("avg_salary"),
+                   valueBoxOutput("avg_age")
+                 ),
+                 fluidRow(
+                   valueBoxOutput("gender_distribution"),
+                   valueBoxOutput("marital_status_distribution"),
+                   valueBoxOutput("job_level_distribution")
+                 ),
+                 plotOutput("age_distribution"),
+                 plotOutput("experience_distribution")
+        ),
+        tabPanel("Performance", 
+                 plotOutput("performance_by_department"),
+                 plotOutput("performance_by_age"),
+                 plotOutput("performance_by_experience")
+        ),
+        tabPanel("Engagement", 
+                 plotOutput("engagement_by_gender"),
+                 plotOutput("engagement_by_marital_status"),
+                 plotOutput("engagement_by_job_level")
+        ),
+        tabPanel("Attrition", 
+                 plotOutput("attrition_by_age"),
+                 plotOutput("attrition_by_department"),
+                 plotOutput("attrition_by_experience")
+        )
+      )
+    )
+  )
+)
+
+server <- function(input, output) {
+  filtered_data <- reactive({
+    data %>% filter(Department == input$department)
+  })
+  
+  output$total_employees <- renderValueBox({
+    valueBox(
+      nrow(filtered_data()), "Total Employees", icon = icon("users"),
+      color = "blue"
+    )
+  })
+  
+  output$avg_salary <- renderValueBox({
+    avg_salary <- round(mean(filtered_data()$Salary), 2)
+    valueBox(
+      avg_salary, "Avg Salary", icon = icon("dollar-sign"),
+      color = "green"
+    )
+  })
+  
+  output$avg_age <- renderValueBox({
+    avg_age <- round(mean(filtered_data()$Age), 2)
+    valueBox(
+      avg_age, "Avg Age", icon = icon("calendar"),
+      color = "purple"
+    )
+  })
+  
+  output$gender_distribution <- renderPlot({
+    ggplot(filtered_data(), aes(x = "", fill = Gender)) +
+      geom_bar(width = 1) +
+      coord_polar(theta = "y") +
+      labs(title = "Gender Distribution", x = "", y = "") +
+      scale_fill_manual(values = c("Male" = "blue", "Female" = "pink")) +
+      theme_void() +
+      geom_text(aes(label = paste0(round((..count..)/sum(..count..)*100), "%")),
+                stat = "count", position = position_stack(vjust = 0.5))
+  })
+  
+  output$marital_status_distribution <- renderPlot({
+    ggplot(filtered_data(), aes(x = MaritalStatus, fill = MaritalStatus)) +
+      geom_bar() +
+      labs(title = "Marital Status Distribution", x = "Marital Status", y = "Count") +
+      scale_fill_manual(values = c("Single" = "red", "Married" = "green", 
+                                   "Divorced" = "orange"))
+  })
+  
+  output$job_level_distribution <- renderPlot({
+    ggplot(filtered_data(), aes(x = JobLevel, fill = JobLevel)) +
+      geom_bar() +
+      labs(title = "Job Level Distribution", x = "Job Level", y = "Count")
+  })
+  
+  output$age_distribution <- renderPlot({
+    ggplot(filtered_data(), aes(x = Age)) +
+      geom_histogram(binwidth = 1, fill = "blue", color = "black") +
+      labs(title = "Age Distribution", x = "Age", y = "Count")
+  })
+  
+  output$experience_distribution <- renderPlot({
+    ggplot(filtered_data(), aes(x = TotalWorkingYears)) +
+      geom_histogram(binwidth = 1, fill = "green", color = "black") +
+      labs(title = "Total Working Years Distribution", x = "Total Working Years", 
+           y = "Count")
+  })
+  
+  output$performance_by_department <- renderPlot({
+    ggplot(filtered_data(), aes(x = Department, y = PerformanceRating, fill = Department)) +
+      geom_boxplot() +
+      labs(title = "Performance by Department", x = "Department", 
+           y = "Performance Rating")
+  })
+  
+  output$performance_by_age <- renderPlot({
+    ggplot(filtered_data(), aes(x = Age, y = PerformanceRating)) +
+      geom_point(color = "blue") +
+      labs(title = "Performance by Age", x = "Age", y = "Performance Rating")
+  })
+  
+  output$performance_by_experience <- renderPlot({
+    ggplot(filtered_data(), aes(x = TotalWorkingYears, y = PerformanceRating)) +
+      geom_point(color = "green") +
+      labs(title = "Performance by Experience", x = "Total Working Years", 
+           y = "Performance Rating")
+  })
+  
+  output$engagement_by_gender <- renderPlot({
+    ggplot(filtered_data(), aes(x = Gender, y = JobInvolvement, fill = Gender)) +
+      geom_boxplot() +
+      labs(title = "Engagement by Gender", x = "Gender", y = "Engagement Score")
+  })
+  
+  output$engagement_by_marital_status <- renderPlot({
+    ggplot(filtered_data(), aes(x = MaritalStatus, y = JobInvolvement,
+                                fill = MaritalStatus)) +
+      geom_boxplot() +
+      labs(title = "Engagement by Marital Status", x = "Marital Status", 
+           y = "Engagement Score")
+  })
+  
+  output$engagement_by_job_level <- renderPlot({
+    ggplot(filtered_data(), aes(x = JobLevel, y = JobInvolvement, fill = JobLevel)) +
+      geom_boxplot() +
+      labs(title = "Engagement by Job Level", x = "Job Level", y = "Engagement Score")
+  })
+  
+  output$attrition_by_age <- renderPlot({
+    ggplot(filtered_data(), aes(x = Age, y = Attrition, fill = Attrition)) +
+      geom_bar(stat = "identity") +
+      labs(title = "Attrition by Age", x = "Age", y = "Attrition")
+  })
+  
+  output$attrition_by_department <- renderPlot({
+    ggplot(filtered_data(), aes(x = Department, y = Attrition, fill = Department)) +
+      geom_bar(stat = "identity") +
+      labs(title = "Attrition by Department", x = "Department", y = "Attrition")
+  })
+  
+  output$attrition_by_experience <- renderPlot({
+    ggplot(filtered_data(), aes(x = TotalWorkingYears, y = Attrition, 
+                                fill = Attrition)) +
+      geom_bar(stat = "identity") +
+      labs(title = "Attrition by Total Working Years", x = "Total Working Years", 
+           y = "Attrition")
+  })
+}
+
+shinyApp(ui, server)
