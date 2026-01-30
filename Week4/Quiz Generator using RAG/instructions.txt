@@ -1,0 +1,1 @@
+To run this code, go to Terminal -> streamlit run quizmodel.py
